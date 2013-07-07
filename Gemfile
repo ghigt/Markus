@@ -10,7 +10,7 @@ source 'http://rubygems.org'
 
 # Bundler requires these gems in all environments
 gem 'rails', '3.0.20'
-gem 'exception_notification'
+gem 'exception_notification', '< 4.0'
 #gem "prototype-rails" #Will be needed with Rails3.1
 gem 'jquery-rails'
 gem 'rubyzip'
