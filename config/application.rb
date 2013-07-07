@@ -22,7 +22,7 @@ module Markus
   config.plugins = [ :ssl_requirement, :auto_complete, :calendar_date_select ]
 
   # Javascripts files always loaded in views
-  config.action_view.javascript_expansions[:defaults] = %w(prototype rails application )
+  config.action_view.javascript_expansions[:defaults] = %w(prototype jquery application)
 
   # Set this if MarkUs is not hosted under / of your Web-host.
   # E.g. if MarkUs should be accessible by http://yourhost.com/markus/instance0
@@ -56,6 +56,6 @@ module Markus
 
   # Configure sensitive parameters which will be filtered from the log file.
   config.filter_parameters += [:password]
-  
+
   end
 end
