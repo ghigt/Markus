@@ -10,8 +10,9 @@ source 'http://rubygems.org'
 
 # Bundler requires these gems in all environments
 gem 'rails', '3.0.20'
-gem 'exception_notification'
-#gem "prototype-rails" Will be needed with Rails3.1
+gem 'exception_notification', '< 4.0'
+#gem "prototype-rails" #Will be needed with Rails3.1
+gem 'jquery-rails'
 gem 'rubyzip'
 gem 'ya2yaml'
 gem 'i18n'
@@ -59,7 +60,7 @@ group :development, :test do
   gem 'time-warp'
   gem 'ruby-debug', :platforms => :mri_18
   gem 'debugger', :platforms => :mri_19
-  gem 'mocha', :require => false
+  gem 'mocha', '0.13.3', :require => false
 end
 
 # If you  plan to use unicorn servers for production
