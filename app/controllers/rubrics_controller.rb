@@ -102,7 +102,16 @@ class RubricsController < ApplicationController
     if !file.nil? && !file.blank?
       begin
         if encoding != nil
-          file = StringIO.new(Iconv.iconv('UTF-8', encoding, file.read).join)
+          if RUBY_VERSION > '1.9'
+            file = StringIO.new(
+                file.read.encode(Encoding::UTF_8, encoding,
+                                 :invalid => :replace,
+                                 :undef => :replace,
+                                 :replace => '').join)
+          else
+            file = StringIO.new(
+                Iconv.iconv('UTF-8', encoding, file.read).join)
+          end
         end
         rubrics = YAML::load(file)
       rescue ArgumentError => e

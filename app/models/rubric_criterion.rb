@@ -1,5 +1,5 @@
 include CsvHelper
-require 'iconv'
+require 'iconv' unless RUBY_VERSION > '1.9'
 
 class RubricCriterion < ActiveRecord::Base
   before_save :round_weight
@@ -226,7 +226,16 @@ class RubricCriterion < ActiveRecord::Base
   def self.parse_csv(file, assignment, invalid_lines, encoding)
     nb_updates = 0
     if encoding != nil
-      file = StringIO.new(Iconv.iconv('UTF-8', encoding, file.read).join)
+      if RUBY_VERSION > '1.9'
+        file = StringIO.new(
+            file.read.encode(Encoding::UTF_8, encoding,
+                                          :invalid => :replace,
+                                          :undef => :replace,
+                                          :replace => '').join)
+      else
+        file = StringIO.new(
+            Iconv.iconv('UTF-8', encoding, file.read).join)
+      end
     end
     CsvHelper::Csv.parse(file.read) do |row|
       next if CsvHelper::Csv.generate_line(row).strip.empty?
@@ -307,7 +316,16 @@ class RubricCriterion < ActiveRecord::Base
   def self.assign_tas_by_csv(csv_file_contents, assignment_id, encoding)
     failures = []
     if encoding != nil
-      csv_file_contents = StringIO.new(Iconv.iconv('UTF-8', encoding, csv_file_contents.read).join)
+      if RUBY_VERSION > '1.9'
+        csv_file_contents = StringIO.new(
+            csv_file_contents.read.encode(Encoding::UTF_8, encoding,
+                                          :invalid => :replace,
+                                          :undef => :replace,
+                                          :replace => '').join)
+      else
+        csv_file_contents = StringIO.new(
+            Iconv.iconv('UTF-8', encoding, csv_file_contents.read).join)
+      end
     end
     CsvHelper::Csv.parse(csv_file_contents) do |row|
       criterion_name = row.shift # Knocks the first item from array

@@ -498,7 +498,16 @@ class Grouping < ActiveRecord::Base
   def self.assign_tas_by_csv(csv_file_contents, assignment_id, encoding)
     failures = []
     if encoding != nil
-      csv_file_contents = StringIO.new(Iconv.iconv('UTF-8', encoding, csv_file_contents).join)
+      if RUBY_VERSION > '1.9'
+        csv_file_contents = StringIO.new(
+            csv_file_contents.read.encode(Encoding::UTF_8, encoding,
+                             :invalid => :replace,
+                             :undef => :replace,
+                             :replace => '').join)
+      else
+        csv_file_contents = StringIO.new(
+            Iconv.iconv('UTF-8', encoding, csv_file_contents.read).join)
+      end
     end
     CsvHelper::Csv.parse(csv_file_contents) do |row|
       group_name = row.shift # Knocks the first item from array

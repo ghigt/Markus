@@ -1,5 +1,5 @@
 include CsvHelper
-require 'iconv'
+require 'iconv' unless RUBY_VERSION > '1.9'
 require 'auto_complete'
 require 'csv_invalid_line_error'
 
@@ -166,7 +166,16 @@ class GroupsController < ApplicationController
       # really bad happens.
       ActiveRecord::Base.transaction do
         if encoding != nil
-          file = StringIO.new(Iconv.iconv('UTF-8', encoding, file.read).join)
+          if RUBY_VERSION > '1.9'
+            file = StringIO.new(
+                file.read.encode(Encoding::UTF_8, encoding,
+                                 :invalid => :replace,
+                                 :undef => :replace,
+                                 :replace => '').join)
+          else
+            file = StringIO.new(
+                Iconv.iconv('UTF-8', encoding, file.read).join)
+          end
         end
         # Old groupings get wiped out
         if !@assignment.groupings.nil? && @assignment.groupings.length > 0

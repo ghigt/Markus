@@ -1,5 +1,5 @@
 include CsvHelper
-require 'iconv'
+require 'iconv' unless RUBY_VERSION > '1.9'
 
 class AnnotationCategoriesController < ApplicationController
   include AnnotationCategoriesHelper
@@ -107,7 +107,19 @@ class AnnotationCategoriesController < ApplicationController
     annotation_line = 0
     unless annotation_category_list.nil?
       if encoding != nil
-        annotation_category_list = StringIO.new(Iconv.iconv('UTF-8', encoding, annotation_category_list.read).join)
+        if RUBY_VERSION > '1.9'
+          annotation_category_list =
+              StringIO.new(annotation_category_list.
+                               read.encode(Encoding::UTF_8,
+                                           encoding, :invalid => :replace,
+                                           :undef => :replace,
+                                           :replace => '').join)
+        else
+          annotation_category_list =
+              StringIO.new(Iconv.iconv('UTF-8',
+                                       encoding,
+                                       annotation_category_list.read).join)
+        end
       end
       CsvHelper::Csv.parse(annotation_category_list) do |row|
         next if CsvHelper::Csv.generate_line(row).strip.empty?
@@ -144,7 +156,16 @@ class AnnotationCategoriesController < ApplicationController
     if !file.nil? && !file.blank?
       begin
         if encoding != nil
-          file = StringIO.new(Iconv.iconv('UTF-8', encoding, file.read).join)
+          if RUBY_VERSION > '1.9'
+            file = StringIO.new(
+                file.read.encode(Encoding::UTF_8, encoding,
+                                 :invalid => :replace,
+                                 :undef => :replace,
+                                 :replace => '').join)
+          else
+            file = StringIO.new(
+                Iconv.iconv('UTF-8', encoding, file.read).join)
+          end
         end
         annotations = YAML::load(file)
       rescue ArgumentError => e

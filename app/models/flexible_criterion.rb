@@ -1,5 +1,5 @@
 include CsvHelper
-require 'iconv'
+require 'iconv' unless RUBY_VERSION > '1.9'
 # Represents a flexible criterion used to mark an assignment that
 # has the marking_scheme_type attribute set to 'flexible'.
 class FlexibleCriterion < ActiveRecord::Base
@@ -225,7 +225,16 @@ class FlexibleCriterion < ActiveRecord::Base
   def self.assign_tas_by_csv(csv_file_contents, assignment_id, encoding)
     failures = []
     if encoding != nil
-      csv_file_contents = StringIO.new(Iconv.iconv('UTF-8', encoding, csv_file_contents.read).join)
+      if RUBY_VERSION > '1.9'
+        csv_file_contents = StringIO.new(
+            csv_file_contents.read.encode(Encoding::UTF_8, encoding,
+                             :invalid => :replace,
+                             :undef => :replace,
+                             :replace => '').join)
+      else
+        csv_file_contents = StringIO.new(
+            Iconv.iconv('UTF-8', encoding, csv_file_contents.read).join)
+      end
     end
     CsvHelper::Csv.parse(csv_file_contents) do |row|
       criterion_name = row.shift # Knocks the first item from array

@@ -1,5 +1,5 @@
 include CsvHelper
-require 'iconv'
+require 'iconv' unless RUBY_VERSION > '1.9'
 
 # GradeEntryForm can represent a test, lab, exam, etc.
 # A grade entry form has many columns which represent the questions and their total
@@ -239,7 +239,16 @@ class GradeEntryForm < ActiveRecord::Base
     totals = []
     grades_file = StringIO.new(grades_file.read)
     if encoding != nil
-      grades_file = StringIO.new(Iconv.iconv('UTF-8', encoding, grades_file.read).join)
+      if RUBY_VERSION > '1.9'
+        grades_file = StringIO.new(
+            grades_file.read.encode(Encoding::UTF_8, encoding,
+                             :invalid => :replace,
+                             :undef => :replace,
+                             :replace => '').join)
+      else
+        grades_file = StringIO.new(
+            Iconv.iconv('UTF-8', encoding, grades_file.read).join)
+      end
     end
 
     # Parse the question names
