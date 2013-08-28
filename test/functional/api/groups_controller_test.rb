@@ -68,8 +68,6 @@ class Api::GroupsControllerTest < ActionController::TestCase
   # Testing authenticated requests
   context 'An authenticated request to api/assignments/id/groups' do
     setup do
-      # Fixtures have manipulated the DB, clear them off.
-      clear_fixtures
 
       # Create admin from blueprints
       @admin = Admin.make
@@ -89,12 +87,18 @@ class Api::GroupsControllerTest < ActionController::TestCase
     context 'getting a json response' do
       setup do
         @request.env['HTTP_ACCEPT'] = 'application/json'
-        get 'show', :assignment_id => 'garbage', :id => 'garbage'
       end
 
       should 'be successful' do
+        get 'show', :assignment_id => 'garbage', :id => 'garbage'
         assert_template 'shared/http_status'
         assert_equal @response.content_type, 'application/json'
+      end
+
+      should 'not use the ActiveRecord class name as the root' do
+        grouping = Grouping.make
+        get 'index', :assignment_id => grouping.assignment.id.to_s
+        assert !@response.body.include?('{"group":')
       end
     end
 

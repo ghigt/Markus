@@ -3,8 +3,7 @@
 # as well as displaying main page
 class MainController < ApplicationController
 
-  include MainHelper
-  include CookieDetection
+  include ApplicationHelper, MainHelper, CookieDetection
 
   protect_from_forgery :except => [:login, :page_not_found]
 
@@ -39,7 +38,7 @@ class MainController < ApplicationController
           redirect_to( uri || { :action => 'index' } )
           return
         else
-          @login_error = flash[:login_notice]
+          @login_error = flash[:error][0]
           render :remote_user_auth_login_fail
           return
         end
@@ -53,7 +52,7 @@ class MainController < ApplicationController
         redirect_to :controller => 'main', :action => 'login'
       end
     else
-      flash[:login_notice] = I18n.t(:cookies_off)
+      flash_message(:error, I18n.t(:cookies_off))
       return
 
     end
@@ -84,7 +83,7 @@ class MainController < ApplicationController
     # authentication is valid
     validation_result = validate_user(params[:user_login], params[:user_login], params[:user_password])
     unless validation_result[:error].nil?
-      flash[:login_notice] = validation_result[:error]
+      flash_message(:error, validation_result[:error])
       redirect_to :action => 'login'
       return
     end
@@ -96,7 +95,7 @@ class MainController < ApplicationController
 
     # Has this student been hidden?
     if found_user.student? && found_user.hidden
-      flash[:login_notice] = I18n.t('account_disabled')
+      flash_message(:error, I18n.t('account_disabled'))
       redirect_to(:action => 'login') && return
     end
 
@@ -110,7 +109,7 @@ class MainController < ApplicationController
       # redirect to last visited page or to main page
       redirect_to( uri || { :action => 'index' } )
     else
-      flash[:login_notice] = I18n.t(:login_failed)
+      flash_message(:error, I18n.t(:login_failed))
     end
   end
 
@@ -167,7 +166,7 @@ class MainController < ApplicationController
     else
       render 'shared/http_status.html', :locals => { :code => '404', :message => HttpStatusHelper::ERROR_CODE['message']['404'] }, :status => 404, :layout => false and return
     end
-    render :api_key_replace, :locals => {:user => @current_user }
+    render 'api_key_replace.js', :locals => {:user => @current_user }, :handlers => [:erb]
   end
 
   # Render 404 error (page not found) if no other route matches.
@@ -201,8 +200,8 @@ class MainController < ApplicationController
     end
     unless validation_result[:error].nil?
       # There were validation errors
-      render :partial => 'role_switch_handler',
-        :locals => { :error => validation_result[:error], :success => false }
+      render :partial => 'role_switch_handler.js',
+        :locals => { :error => validation_result[:error] }, :handlers => [:erb]
       return
     end
 
@@ -214,8 +213,8 @@ class MainController < ApplicationController
     # Check if an admin is trying to login as another admin. Should not be allowed
     if found_user.admin?
       # error
-      render :partial => 'role_switch_handler', :locals =>
-            { :error => I18n.t(:cannot_login_as_another_admin), :success => false }
+      render :partial => 'role_switch_handler.js', :locals =>
+            { :error => I18n.t(:cannot_login_as_another_admin) }, :handlers => [:erb]
       return
     end
 
@@ -236,11 +235,11 @@ class MainController < ApplicationController
       current_user.set_api_key # set api key in DB for user if not yet set
       # All good, redirect to the main page of the viewer, discard
       # role switch modal
-      render :partial => 'role_switch_handler', :locals =>
-            { :success => true }
+      render :partial => 'role_switch_handler.js', :locals =>
+          { :error => nil }, :handlers => [:erb]
     else
-      render :partial => 'role_switch_handler', :locals =>
-            { :error => I18n.t(:login_failed), :success => false }
+      render :partial => 'role_switch_handler.js', :locals =>
+          { :error => I18n.t(:login_failed) }, :handlers => [:erb]
     end
   end
 
@@ -283,13 +282,13 @@ private
       # not a good idea to report this to the outside world. It makes it
       # easier for attempted break-ins
       # if one can distinguish between existent and non-existent users.
-      flash[:login_notice] = I18n.t(:login_failed)
+      flash_message(:error, I18n.t(:login_failed))
       return false
     end
 
     # Has this student been hidden?
     if found_user.student? && found_user.hidden
-      flash[:login_notice] = I18n.t('account_disabled')
+      flash_message(:error, I18n.t('account_disabled'))
       return false
     end
 
@@ -307,7 +306,7 @@ private
     if logged_in?
       true
     else
-      flash[:login_notice] = I18n.t(:login_failed)
+      flash_message(:error, I18n.t(:login_failed))
       false
     end
   end

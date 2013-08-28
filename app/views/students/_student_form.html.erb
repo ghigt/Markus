@@ -1,26 +1,9 @@
-<script type="text/javascript">
-//<![CDATA[
-document.observe("dom:loaded", function(){
-modalAddNewSection = new Control.Modal($('add_new_section_dialog'),
-  {
-     overlayOpacity: 0.75,
-     className: 'modalAddNewSection',
-     fade: false
-  });
-  modalAddNewSection.close();
-});
-//]]>
-</script>
 <div id="add_new_section_dialog">
 </div>
 <div class="section">
   <%= form_for @user, :as => :user do |f| %>
 
-    <% if flash[:error] && !flash[:error].empty? %>
-      <div class="notice">
-        <%=flash[:error]%>
-      </div>
-    <% end %>
+    <%= render 'shared/flash_message' %>
 
     <%= raw(f.label(:user_name, I18n.t("user.user_name"))) %>
     <%= raw(f.text_field :user_name) %><br />

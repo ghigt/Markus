@@ -10,10 +10,6 @@ require 'machinist'
 
 class RubricsControllerTest < AuthenticatedControllerTest
 
-  def setup
-    clear_fixtures
-  end
-
   RUBRIC_CRITERIA_CSV_STRING = "Algorithm Design,2.0,Horrible,Poor,Satisfactory,Good,Excellent,,,,,
 Documentation,2.7,Horrible,Poor,Satisfactory,Good,Excellent,,,,,
 Testing,2.2,Horrible,Poor,Satisfactory,Good,Excellent,,,,,
@@ -136,10 +132,7 @@ Correctness,2.0,Horrible,Poor,Satisfactory,Good,Excellent,,,,,\n"
               :assignment_id => @assignment.id,
               :csv_upload => {:rubric => tempfile}
       assert_not_nil assigns :assignment
-      assert set_the_flash.to(:error => I18n.t('csv_invalid_lines'),
-                              :invalid_lines => [
-                          'criterion 5: ' + I18n.t('criteria.error.incomplete_row'),
-                          'criterion 6: ' + I18n.t('criteria.error.incomplete_row')])
+      assert flash[:error].include?(I18n.t('csv_invalid_lines'))
       assert_response :redirect
     end
 
@@ -147,7 +140,7 @@ Correctness,2.0,Horrible,Poor,Satisfactory,Good,Excellent,,,,,\n"
       post_as @admin,
               :csv_upload,
               :assignment_id => @assignment.id,
-              :csv_upload => {:rubric => fixture_file_upload('../files/test_rubric_criteria_UTF-8.csv')},
+              :csv_upload => {:rubric => fixture_file_upload('files/test_rubric_criteria_UTF-8.csv')},
               :encoding => 'UTF-8'
       assert_response :redirect
       test_criterion = RubricCriterion.find_by_assignment_id_and_rubric_criterion_name(@assignment.id, 'RubricCriteriaÈrÉØrr')
@@ -158,7 +151,7 @@ Correctness,2.0,Horrible,Poor,Satisfactory,Good,Excellent,,,,,\n"
       post_as @admin,
               :csv_upload,
               :assignment_id => @assignment.id,
-              :csv_upload => {:rubric => fixture_file_upload('../files/test_rubric_criteria_ISO-8859-1.csv')},
+              :csv_upload => {:rubric => fixture_file_upload('files/test_rubric_criteria_ISO-8859-1.csv')},
               :encoding => 'ISO-8859-1'
       assert_response :redirect
       test_criterion = RubricCriterion.find_by_assignment_id_and_rubric_criterion_name(@assignment.id, 'RubricCriteriaÈrÉØrr')
@@ -169,7 +162,7 @@ Correctness,2.0,Horrible,Poor,Satisfactory,Good,Excellent,,,,,\n"
       post_as @admin,
               :csv_upload,
               :assignment_id => @assignment.id,
-              :csv_upload => {:rubric => fixture_file_upload('../files/test_rubric_criteria_UTF-8.csv')},
+              :csv_upload => {:rubric => fixture_file_upload('files/test_rubric_criteria_UTF-8.csv')},
               :encoding => 'ISO-8859-1'
       assert_response :redirect
       test_criterion = RubricCriterion.find_by_assignment_id_and_rubric_criterion_name(@assignment.id, 'RubricCriteriaÈrÉØrr')
@@ -375,7 +368,7 @@ END
       should 'download rubrics as CSV' do
         get_as @admin, :download_csv, :assignment_id => @assignment.id
         assert assigns :assignment
-        assert respond_with_content_type 'text/csv'
+        assert_equal response.header['Content-Type'], 'text/csv'
         assert_response :success
         assert_equal "Algorithm,1.0,Horrible,Poor,Satisfactory,Good,Excellent,,,,,\n",
                       @response.body
@@ -488,6 +481,6 @@ END
 
         end
       end # with another submission
-    end 
+    end
   end # An admin, with an assignment, and a rubric criterion
 end

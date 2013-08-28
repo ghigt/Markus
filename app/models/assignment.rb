@@ -60,6 +60,12 @@ class Assignment < ActiveRecord::Base
 
   validates_presence_of :marking_scheme_type
 
+  # For those, please refer to issue #1126
+  # Because of app/views/assignments/_list_manage.html.erb line:13
+  validates :description, :presence => true
+  # Because of app/views/main/_grade_distribution_graph.html.erb:25
+  validates :assignment_stat, :presence => true
+
   # since allow_web_submits is a boolean, validates_presence_of does not work:
   # see the Rails API documentation for validates_presence_of (Model
   # validations)
@@ -69,7 +75,11 @@ class Assignment < ActiveRecord::Base
   validates_inclusion_of :assign_graders_to_criteria, :in => [true, false]
 
   before_save :reset_collection_time
-  validate :minimum_number_of_groups, :check_timezone
+  validate :minimum_number_of_groups
+  # Call custom validator in order to validate the :due_date attribute
+  # :date => true maps to DateValidator (:custom_name => true maps to CustomNameValidator)
+  # Look in lib/validators/* for more info
+  validates :due_date, :date => true
   after_save :update_assigned_tokens
 
   # Set the default order of assignments: in ascending order of due_date
@@ -111,13 +121,6 @@ class Assignment < ActiveRecord::Base
   def minimum_number_of_groups
     if (group_max && group_min) && group_max < group_min
       errors.add(:group_max, 'must be greater than the minimum number of groups')
-      false
-    end
-  end
-
-  def check_timezone
-    if Time.zone.parse(due_date.to_s).nil?
-      errors.add :due_date, 'is not a valid date'
       false
     end
   end

@@ -68,8 +68,6 @@ class Api::UsersControllerTest < ActionController::TestCase
   # Testing authenticated requests
   context 'An authenticated request to api/users' do
     setup do
-      # Fixtures have manipulated the DB, clear them off.
-      clear_fixtures
 
       # Creates admin from blueprints.
       @admin = Admin.make
@@ -219,12 +217,18 @@ class Api::UsersControllerTest < ActionController::TestCase
     context 'getting a json response' do
       setup do
         @request.env['HTTP_ACCEPT'] = 'application/json'
-        get 'show', :id => 'garbage'
       end
 
       should 'be successful' do
+        get 'show', :id => 'garbage'
         assert_template 'shared/http_status'
         assert_equal @response.content_type, 'application/json'
+      end
+
+      should 'not use the ActiveRecord class name as the root' do
+        user = Admin.make
+        get 'show', :id => user.id.to_s
+        assert !@response.body.include?('{"admin":')
       end
     end
 

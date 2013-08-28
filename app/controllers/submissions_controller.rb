@@ -16,6 +16,7 @@ class SubmissionsController < ApplicationController
                             :downloads,
                             :s_table_paginate,
                             :collect_and_begin_grading,
+                            :download_groupings_files,
                             :manually_collect_and_begin_grading,
                             :collect_ta_submissions,
                             :repo_browser,
@@ -30,6 +31,7 @@ class SubmissionsController < ApplicationController
                           :manually_collect_and_begin_grading,
                           :collect_ta_submissions,
                           :repo_browser,
+                          :download_groupings_files,
                           :populate_repo_browser,
                           :update_converted_pdfs,
                           :update_submissions]
@@ -39,37 +41,157 @@ class SubmissionsController < ApplicationController
                           :update_files]
   before_filter :authorize_for_user, :only => [:download, :downloads]
 
-  S_TABLE_PARAMS = {
+  # TABLE FOR TAs
+  TA_TABLE_PARAMS = {
     :model => Grouping,
     :per_pages => [15, 30, 50, 100, 150, 500, 1000],
     :filters => {
       'none' => {
-        :display => I18n.t("browse_submissions.show_all"),
+        :display => I18n.t('browse_submissions.show_all'),
         :proc => lambda { |params, to_include|
-          return params[:assignment].groupings.all(:include => to_include)}},
+          params[:assignment].ta_memberships.find_all_by_user_id(
+              params[:user_id], :include => [:grouping => to_include]).
+              collect { |m| m.grouping }
+        }
+      },
       'unmarked' => {
-        :display => I18n.t("browse_submissions.show_unmarked"),
-        :proc => lambda { |params, to_include| return params[:assignment].groupings.all(:include => [to_include]).select{|g| !g.has_submission? || (g.has_submission? && g.current_submission_used.get_latest_result.marking_state == Result::MARKING_STATES[:unmarked]) } }},
+        :display => I18n.t('browse_submissions.show_unmarked'),
+        :proc => lambda { |params, to_include| 
+           (params[:assignment].ta_memberships.find_all_by_user_id(
+               params[:user_id], :include => [:grouping => to_include]).
+               collect{|m| m.grouping}
+           ).select { |g| !g.has_submission? || (g.has_submission? &&
+                   g.current_submission_used.get_latest_result.marking_state ==
+                       Result::MARKING_STATES[:unmarked]) }}
+      },
+      
       'partial' => {
-        :display => I18n.t("browse_submissions.show_partial"),
-        :proc => lambda { |params, to_include| return params[:assignment].groupings.all(:include => [to_include]).select{|g| g.has_submission? && g.current_submission_used.get_latest_result.marking_state == Result::MARKING_STATES[:partial] } }},
+        :display => I18n.t('browse_submissions.show_partial'),
+        :proc => lambda { |params, to_include| 
+           (params[:assignment].ta_memberships.find_all_by_user_id(
+                    params[:user_id], :include => [:grouping => to_include]).
+               collect{|m| m.grouping}
+           ).select{ |g| g.has_submission? &&
+               g.current_submission_used.get_latest_result.marking_state ==
+                   Result::MARKING_STATES[:partial]} }
+      },
+      
       'complete' => {
-        :display => I18n.t("browse_submissions.show_complete"),
-        :proc => lambda { |params, to_include| return params[:assignment].groupings.all(:include => [to_include]).select{|g| g.has_submission? && g.current_submission_used.get_latest_result.marking_state == Result::MARKING_STATES[:complete] } }},
+        :display => I18n.t('browse_submissions.show_complete'),
+        :proc => lambda{ |params, to_include| 
+          (params[:assignment].ta_memberships.find_all_by_user_id(
+              params[:user_id], :include => [:grouping => to_include]).
+              collect{|m| m.grouping}
+          ).select{|g| g.has_submission? &&
+              g.current_submission_used.get_latest_result.marking_state ==
+                  Result::MARKING_STATES[:complete]} }
+      },
+      
       'released' => {
-        :display => I18n.t("browse_submissions.show_released"),
-        :proc => lambda { |params, to_include| return params[:assignment].groupings.all(:include => [to_include]).select{|g| g.has_submission? && g.current_submission_used.get_latest_result.released_to_students} }},
+        :display => I18n.t('browse_submissions.show_released'),
+        :proc => lambda{ |params, to_include| 
+          (params[:assignment].ta_memberships.find_all_by_user_id(
+              params[:user_id], :include => [:grouping => to_include]).
+              collect{|m| m.grouping}
+          ).select{|g| g.has_submission? &&
+              g.current_submission_used.get_latest_result.released_to_students}}
+      },
+      
       'assigned' => {
-        :display => I18n.t("browse_submissions.show_assigned_to_me"),
-        :proc => lambda { |params, to_include| return params[:assignment].ta_memberships.find_all_by_user_id(params[:user_id], :include => [:grouping => to_include]).collect{|m| m.grouping} }}
+        :display => I18n.t('browse_submissions.show_assigned_to_me'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].ta_memberships.find_all_by_user_id(
+              params[:user_id], :include => [:grouping => to_include]).
+              collect{|m| m.grouping} }}
+    },
+    
+    :sorts => {
+      'group_name' => lambda { |a,b| a.group.group_name.downcase <=>
+        b.group.group_name.downcase},
+      'repo_name' => lambda { |a,b| a.group.repo_name.downcase <=>
+          b.group.repo_name.downcase },
+      'revision_timestamp' => lambda { |a,b|
+        ret = -1 if !a.has_submission?
+        ret ||= 1 if !b.has_submission?
+        ret ||= a.current_submission_used.revision_timestamp <=>
+            b.current_submission_used.revision_timestamp
+      },
+      'marking_state' => lambda { |a,b|
+        ret = -1 if !a.has_submission?
+        ret ||= 1 if !b.has_submission?
+        ret ||= a.current_submission_used.get_latest_result.marking_state <=>
+            b.current_submission_used.get_latest_result.marking_state
+      },
+      'total_mark' => lambda { |a,b|
+        ret = -1 if !a.has_submission?
+        ret ||= 1 if !b.has_submission?
+        ret ||= a.current_submission_used.get_latest_result.total_mark <=>
+            b.current_submission_used.get_latest_result.total_mark
+      },
+      'grace_credits_used' => lambda { |a,b|
+        a.grace_period_deduction_single <=> b.grace_period_deduction_single
+      },
+      'section' => lambda { |a,b|
+        ret = -1 if !a.section
+        ret ||= 1 if !b.section
+        ret ||= a.section <=> b.section
+      }
+    }
+  }
+  
+  # TABLE FOR Admin
+  ADMIN_TABLE_PARAMS = {
+    :model => Grouping,
+    :per_pages => [15, 30, 50, 100, 150, 500, 1000],
+    :filters => {
+      'none' => {
+        :display => I18n.t('browse_submissions.show_all'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].groupings.all(:include => to_include)}},
+      'unmarked' => {
+        :display => I18n.t('browse_submissions.show_unmarked'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].groupings.all(:include => [to_include]).
+              select{|g| !g.has_submission? || (g.has_submission? &&
+              g.current_submission_used.get_latest_result.marking_state ==
+                  Result::MARKING_STATES[:unmarked]) } }},
+      'partial' => {
+        :display => I18n.t('browse_submissions.show_partial'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].groupings.all(:include => [to_include]).
+              select{|g| g.has_submission? &&
+              g.current_submission_used.get_latest_result.marking_state ==
+                  Result::MARKING_STATES[:partial] } }},
+      'complete' => {
+        :display => I18n.t('browse_submissions.show_complete'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].groupings.all(:include => [to_include]).
+              select{|g| g.has_submission? &&
+              g.current_submission_used.get_latest_result.marking_state ==
+                  Result::MARKING_STATES[:complete] } }},
+      'released' => {
+        :display => I18n.t('browse_submissions.show_released'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].groupings.all(:include => [to_include]).
+              select{|g| g.has_submission? &&
+              g.current_submission_used.get_latest_result.released_to_students}}},
+      'assigned' => {
+        :display => I18n.t('browse_submissions.show_assigned_to_me'),
+        :proc => lambda { |params, to_include|
+          params[:assignment].ta_memberships.find_all_by_user_id(
+              params[:user_id], :include => [:grouping => to_include]).
+              collect{|m| m.grouping} }}
     },
     :sorts => {
-      'group_name' => lambda { |a,b| a.group.group_name.downcase <=> b.group.group_name.downcase},
-      'repo_name' => lambda { |a,b| a.group.repo_name.downcase <=> b.group.repo_name.downcase },
+      'group_name' => lambda { |a,b|
+        a.group.group_name.downcase <=> b.group.group_name.downcase},
+      'repo_name' => lambda { |a,b|
+        a.group.repo_name.downcase <=> b.group.repo_name.downcase },
       'revision_timestamp' => lambda { |a,b|
-        return -1 if !a.has_submission?
-        return 1 if !b.has_submission?
-        return a.current_submission_used.revision_timestamp <=> b.current_submission_used.revision_timestamp
+        ret = -1 if !a.has_submission?
+        ret ||= 1 if !b.has_submission?
+        ret ||= a.current_submission_used.revision_timestamp <=>
+            b.current_submission_used.revision_timestamp
       },
       # Ordering for marking state: 
       #   Released (icon: "sent mail") - complete & released_to_student
@@ -78,32 +200,36 @@ class SubmissionsController < ApplicationController
       #   Partial (icon: pencil) - partial
       #   Unmarked (icon : pencil) - unmarked
       'marking_state' => lambda { |a,b|
-        return -1 if !a.has_submission?
-        return 1 if !b.has_submission?
-        return -1 if a.current_submission_used.get_latest_result.released_to_students == true
-        return 1 if b.current_submission_used.get_latest_result.released_to_students == true
-        if a.current_submission_used.get_latest_result.marking_state == Result::MARKING_STATES[:partial] && 
-          b.current_submission_used.get_latest_result.marking_state == Result::MARKING_STATES[:partial]
-            return -1 if a.current_submission_used.remark_submitted?
-            return 1 if b.current_submission_used.remark_submitted?
-            return 0
-        end 
-        return a.current_submission_used.get_latest_result.marking_state <=> 
-          b.current_submission_used.get_latest_result.marking_state
+        if !a.has_submission? || a.current_submission_used.
+            get_latest_result.released_to_students
+          -1
+        elsif !b.has_submission? || b.current_submission_used.
+            get_latest_result.released_to_students
+          1
+        elsif a.current_submission_used.get_latest_result.marking_state ==
+            Result::MARKING_STATES[:partial] && b.current_submission_used.
+            get_latest_result.marking_state == Result::MARKING_STATES[:partial]
+          ret ||= -1 if a.current_submission_used.remark_submitted?
+          ret ||= 1 if b.current_submission_used.remark_submitted?
+          ret ||= 0
+        else
+          a.current_submission_used.get_latest_result.marking_state <=>
+              b.current_submission_used.get_latest_result.marking_state
+        end
       },
       'total_mark' => lambda { |a,b|
-        return -1 if !a.has_submission?
-        return 1 if !b.has_submission?
-        return a.current_submission_used.get_latest_result.total_mark <=> 
+        ret = -1 if !a.has_submission?
+        ret ||= 1 if !b.has_submission?
+        ret ||= a.current_submission_used.get_latest_result.total_mark <=>
           b.current_submission_used.get_latest_result.total_mark
       },
       'grace_credits_used' => lambda { |a,b|
-        return a.grace_period_deduction_single <=> b.grace_period_deduction_single
+        a.grace_period_deduction_single <=> b.grace_period_deduction_single
       },
       'section' => lambda { |a,b|
-        return -1 if !a.section
-        return 1 if !b.section
-        return a.section <=> b.section
+        ret = -1 if !a.section
+        ret ||= 1 if !b.section
+        ret ||= a.section <=> b.section
       }
     }
   }
@@ -117,22 +243,39 @@ class SubmissionsController < ApplicationController
     @repository_name = @grouping.group.repository_name
     repo = @grouping.group.repo
     begin
-      if !params[:revision_timestamp].nil?
+      if params[:revision_timestamp]
         @revision_number = repo.get_revision_by_timestamp(Time.parse(params[:revision_timestamp])).revision_number
-      elsif !params[:revision_number].nil?
+      elsif params[:revision_number]
         @revision_number = params[:revision_number].to_i
       else
         @revision_number = repo.get_latest_revision.revision_number
       end
       @revision = repo.get_revision(@revision_number)
       @revision_timestamp = @revision.timestamp
-      repo.close
     rescue Exception => e
       flash[:error] = e.message
       @revision_number = repo.get_latest_revision.revision_number
       @revision_timestamp = repo.get_latest_revision.timestamp
-      repo.close
     end
+    # generate an revisions' history with date and num
+    @revisions_history = []
+    rev_number = repo.get_latest_revision.revision_number + 1
+    rev_number.times.each do |rev|
+      begin
+        revision = repo.get_revision(rev)
+        unless revision.path_exists?(
+            File.join(@assignment.repository_folder, @path))
+          raise 'error'
+        end
+      rescue Exception
+        revision = nil
+      end
+      if revision
+        @revisions_history << {:num => revision.revision_number,
+                               :date => revision.timestamp}
+      end
+    end
+    repo.close
   end
 
   def populate_repo_browser
@@ -152,10 +295,10 @@ class SubmissionsController < ApplicationController
       end
       @table_rows = {}
       @files.sort.each do |file_name, file|
-        @table_rows[file.id] = construct_repo_browser_table_row(file_name, file)
+        @table_rows[file.object_id] = construct_repo_browser_table_row(file_name, file)
       end
       @directories.sort.each do |directory_name, directory|
-        @table_rows[directory.id] = construct_repo_browser_directory_table_row(directory_name, directory)
+        @table_rows[directory.object_id] = construct_repo_browser_directory_table_row(directory_name, directory)
       end
       render :template => 'submissions/repo_browser/populate_repo_browser'
     end
@@ -285,14 +428,11 @@ class SubmissionsController < ApplicationController
   end
 
   def browse
-    if current_user.ta?
-      params[:filter] = 'assigned'
-    else
-      if params[:filter] == nil or params[:filter].blank?
-        params[:filter] = 'none'
-      end
+
+    if params[:filter].blank?
+      params[:filter] = 'none'
     end
-    
+
     @assignment = Assignment.find(params[:assignment_id])
     
     @c_per_page = current_user.id.to_s + '_' + @assignment.id.to_s + '_per_page'
@@ -310,12 +450,24 @@ class SubmissionsController < ApplicationController
     else
        params[:sort_by] = 'group_name' 
     end
- 
-    @groupings, @groupings_total = handle_paginate_event(
-      S_TABLE_PARAMS,                                     # the data structure to handle filtering and sorting
-        { :assignment => @assignment,                     # the assignment to filter by
-          :user_id => current_user.id},                   # the submissions accessable by the current user
-      params)                                             # additional parameters that affect things like sorting
+
+    # the data structure to handle filtering and sorting
+    # the assignment to filter by
+    # the submissions accessible by the current user
+    # additional parameters that affect things like sorting
+    if current_user.ta?
+        @groupings, @groupings_total = handle_paginate_event(
+      TA_TABLE_PARAMS,
+        { :assignment => @assignment,
+          :user_id => current_user.id},
+      params)
+    else
+      @groupings, @groupings_total = handle_paginate_event(
+        ADMIN_TABLE_PARAMS,
+          { :assignment => @assignment,
+            :user_id => current_user.id},
+        params)
+    end
 
     #Eager load all data only for those groupings that will be displayed
     sorted_groupings = @groupings
@@ -342,9 +494,16 @@ class SubmissionsController < ApplicationController
     end
  
     @current_page = params[:page].to_i()
-    @per_page = cookies[@c_per_page] 
-    @filters = get_filters(S_TABLE_PARAMS)
-    @per_pages = S_TABLE_PARAMS[:per_pages]
+    @per_page = cookies[@c_per_page]
+
+    if current_user.ta?
+      @filters = get_filters(TA_TABLE_PARAMS)
+      @per_pages = TA_TABLE_PARAMS[:per_pages]
+    else
+      @filters = get_filters(ADMIN_TABLE_PARAMS)
+      @per_pages = ADMIN_TABLE_PARAMS[:per_pages]
+    end
+
     @desc = params[:desc]
     @filter = params[:filter]
     @sort_by = cookies[@c_sort_by]
@@ -507,6 +666,71 @@ class SubmissionsController < ApplicationController
   end
 
   ##
+  # Download all files from all groupings in a .zip file.
+  ##
+  def download_groupings_files
+
+    assignment = Assignment.find(params[:assignment_id])
+
+    ## create the zip name with the user name to have less chance to delete
+    ## a currently downloading file
+    short_id = assignment.short_identifier
+    zip_name = short_id + '_' + current_user.user_name + '.zip'
+    ## check if there is a '/' in the file name to replace by '_'
+    zip_path = 'tmp/' + zip_name.tr('/', '_')
+
+    ## delete the old file if it exists
+    File.delete(zip_path) if File.exist?(zip_path)
+
+    grouping_ids = params[:groupings]
+
+    ## if there is no grouping, render a message
+    if grouping_ids.blank?
+      render :text => t('student.submission.no_groupings_available')
+      return
+    end
+
+    groupings = Grouping.find(grouping_ids)
+
+    ## build the zip file
+    Zip::ZipFile.open(zip_path, Zip::ZipFile::CREATE) do |zip_file|
+
+      groupings.map do |grouping|
+
+        ## retrieve the submitted files
+        submission = grouping.current_submission_used
+        next unless submission
+        files = submission.submission_files
+
+        ## create the grouping directory
+        sub_folder = grouping.group.repo_name
+        zip_file.mkdir(sub_folder) unless zip_file.find_entry(sub_folder)
+
+        files.each do |file|
+
+          ## retrieve the file and print an error on redirect back if there is
+          begin
+            file_content = file.retrieve_file
+          rescue Exception => e
+            flash[:error] = e.message
+            redirect_to :back
+            return
+          end
+
+          ## create the file inside the sub folder
+          zip_file.get_output_stream(File.join(sub_folder, file.filename)) do |f|
+            f.puts file_content
+          end
+
+        end
+      end
+    end
+
+    ## Send the Zip file
+    send_file zip_path, :disposition => 'inline', :filename => zip_name
+  end
+
+  ##
   # Download all files from a repository folder in a Zip file.
   ##
   def downloads
@@ -574,8 +798,14 @@ class SubmissionsController < ApplicationController
       if params[:filter].blank?
         raise I18n.t('student.submission.expect_filter')
       end
-      # Get all Groupings for this filter
-      groupings = S_TABLE_PARAMS[:filters][params[:filter]][:proc].call({:assignment => assignment, :user_id => current_user.id}, {})
+     
+      # Get all Groupings for this filter 
+      if current_user.ta?
+        groupings = TA_TABLE_PARAMS[:filters][params[:filter]][:proc].call({:assignment => assignment, :user_id => current_user.id}, {})
+      else
+        groupings = ADMIN_TABLE_PARAMS[:filters][params[:filter]][:proc].call({:assignment => assignment, :user_id => current_user.id}, {})
+      end
+    
     else
       # User selected particular Grouping IDs
       if params[:groupings].nil?
