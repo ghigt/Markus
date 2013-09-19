@@ -23,7 +23,7 @@ namespace :markus do
   namespace :simulator do
     desc "Generate assignments, random students, submissions and TA data"
     task(:create => :environment) do
-      
+
       num_of_assignments = Integer(ENV["NUM_OF_ASSIGNMENTS"])
       # If the uer did not provide the environment variable "NUM_OF_ASSIGNMENTS",
       # the simulator will create two assignments
@@ -109,20 +109,21 @@ namespace :markus do
         puts "Finish creating assignment" + assignment_short_identifier + "."
 
         puts "Generating TAs ..."
-        num_of_tas = Integer(ENV["NUM_OF_TAS"]) 
+        num_of_tas = Integer(ENV["NUM_OF_TAS"])
         # If the uer did not provide the environment variable "NUM_OF_TAS"
         if ENV["NUM_OF_TAS"].nil?
           num_of_tas = rand(3) + 1
         end
         curr_ta_num = 1
-        # student_num is the student number for students created in this 
+        # student_num is the student number for students created in this
         # assignment. The number will increase by one for the next created
         # student.
         student_num = 1
         while (curr_ta_num <= num_of_tas) do
           puts ''
           # Form a new TA membership with some default value.
-          ta_last_name = (curr_assignment_num_for_name*10 + curr_ta_num).to_s
+          ta_last_name = curr_assignment_num_for_name.to_s + curr_ta_num.to_s +
+            student_num.to_s
           ta_user_name = "TA" + ta_last_name
 
           puts "Start generating " + ta_user_name.to_s + "... "
@@ -140,7 +141,9 @@ namespace :markus do
 
           curr_student_num = 1
           while (curr_student_num <= num_of_students) do
-            student_last_name = (curr_assignment_num_for_name*10 + student_num).to_s
+            student_last_name = curr_assignment_num_for_name.to_s + curr_ta_num.to_s +
+              student_num.to_s
+
             student_user_name = "Student # " +  student_last_name
 
             puts "Start generating " + student_user_name.to_s + "... "
@@ -148,7 +151,7 @@ namespace :markus do
                     :last_name => student_last_name,
                     :first_name => 'Student',
                     :type => 'Student')
-            
+
             student.save!
             student.create_group_for_working_alone_student(assignment.id)
             student.save
@@ -213,7 +216,7 @@ namespace :markus do
                 m.markable_type = "RubricCriterion"
                 m.markable_id = criterion.id
                 m.result = result
-                m.mark = rand(criterion.weight) # assign some random mark
+                m.mark = rand(4) # assign some random mark
                 m.save!
               end
 
